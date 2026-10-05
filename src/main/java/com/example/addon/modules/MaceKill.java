@@ -8,7 +8,6 @@ import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.network.protocol.game.ServerboundInteractPacket;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.network.protocol.game.ServerboundSwingPacket;
 import net.minecraft.world.InteractionHand;
@@ -63,6 +62,7 @@ public class MaceKill extends Module {
         .defaultValue(15).min(2).sliderRange(2, 100).visible(totemBypass::get).build());
 
     private static final double STEP = 9.0; // limite ~10 blocchi per pacchetto
+    private boolean busy = false; // evita che il colpo extra rilanci l'evento all'infinito
 
     public MaceKill() {
         super(AddonTemplate.CATEGORY, "mace-kill", "Smash con la mace da qualsiasi altezza + totem bypass.");
@@ -70,7 +70,8 @@ public class MaceKill extends Module {
 
     @EventHandler
     private void onAttack(AttackEntityEvent event) {
-        if (mc.player == null || mc.getConnection() == null || mc.level == null) return;
+        if (busy) return;
+        if (mc.player == null || mc.getConnection() == null || mc.level == null || mc.gameMode == null) return;
         if (!mc.player.getMainHandItem().is(Items.MACE)) return;
         if (!(event.entity instanceof LivingEntity target)) return;
         if (onlyPlayers.get() && !(event.entity instanceof Player)) return;
@@ -86,7 +87,12 @@ public class MaceKill extends Module {
             if (firstH >= 2) {
                 fakeFall(firstH);
                 // Colpo extra: fa scoppiare il totem. Dopo lo smash la fallDistance torna a 0.
-                mc.getConnection().send(ServerboundInteractPacket.createAttackPacket(target, mc.player.isShiftKeyDown()));
+                busy = true;
+                try {
+                    mc.gameMode.attack(mc.player, target);
+                } finally {
+                    busy = false;
+                }
                 mc.getConnection().send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
             }
         }
