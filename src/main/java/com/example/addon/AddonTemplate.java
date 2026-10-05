@@ -21,6 +21,7 @@ public class AddonTemplate extends MeteorAddon {
     @Override
     public void onInitialize() {
         LOG.info("Initializing Meteor Addon Template");
+          Modules.get().add(new com.example.addon.modules.MaceKill());
 
         // Modules
         Modules.get().add(new ModuleExample());
