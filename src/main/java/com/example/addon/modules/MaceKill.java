@@ -8,29 +8,25 @@ import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.Box;
+import net.minecraft.network.protocol.game.ServerboundInteractPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.protocol.game.ServerboundSwingPacket;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.phys.AABB;
 
 /**
- * MaceKill + Totem Bypass.
+ * MaceKill + Totem Bypass (versione con mappings Mojang).
  *
  * Smash: prima del colpo manda pacchetti di movimento (su/giu, onGround=false)
  * cosi' il server accumula fallDistance e applica il danno smash della mace.
  *
  * Totem bypass: se il bersaglio ha un totem, il primo colpo (altezza minore)
- * fa "pop" del totem; subito dopo il colpo reale con altezza maggiore supera il
- * danno gia' subito nei frame di invulnerabilita' (viene applicata la differenza)
- * e uccide il bersaglio prima che il totem/assorbimento lo protegga.
- *
- * Target: Minecraft 1.21.x, mappings Yarn. Da 1.21.2 PositionAndOnGround
- * richiede anche horizontalCollision (vedi sendPos).
+ * fa scoppiare il totem; subito dopo il colpo reale con altezza maggiore
+ * supera il danno gia' subito e applica la differenza.
  */
 public class MaceKill extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -63,7 +59,7 @@ public class MaceKill extends Module {
 
     private final Setting<Double> firstHeight = sgTotem.add(new DoubleSetting.Builder()
         .name("first-hit-height")
-        .description("Altezza del primo colpo (deve far scoppiare il totem ed essere MINORE di 'height').")
+        .description("Altezza del primo colpo (deve essere MINORE di 'height').")
         .defaultValue(15).min(2).sliderRange(2, 100).visible(totemBypass::get).build());
 
     private static final double STEP = 9.0; // limite ~10 blocchi per pacchetto
@@ -74,10 +70,10 @@ public class MaceKill extends Module {
 
     @EventHandler
     private void onAttack(AttackEntityEvent event) {
-        if (mc.player == null || mc.getNetworkHandler() == null || mc.world == null) return;
-        if (!mc.player.getMainHandStack().isOf(Items.MACE)) return;
+        if (mc.player == null || mc.getConnection() == null || mc.level == null) return;
+        if (!mc.player.getMainHandItem().is(Items.MACE)) return;
         if (!(event.entity instanceof LivingEntity target)) return;
-        if (onlyPlayers.get() && !(event.entity instanceof PlayerEntity)) return;
+        if (onlyPlayers.get() && !(event.entity instanceof Player)) return;
 
         double cap = checkCeiling.get() ? freeHeightAbove(height.get()) : height.get();
         double finalH = Math.min(height.get(), cap);
@@ -90,8 +86,8 @@ public class MaceKill extends Module {
             if (firstH >= 2) {
                 fakeFall(firstH);
                 // Colpo extra: fa scoppiare il totem. Dopo lo smash la fallDistance torna a 0.
-                mc.getNetworkHandler().sendPacket(PlayerInteractEntityC2SPacket.attack(target, mc.player.isSneaking()));
-                mc.getNetworkHandler().sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+                mc.getConnection().send(ServerboundInteractPacket.createAttackPacket(target, mc.player.isShiftKeyDown()));
+                mc.getConnection().send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
             }
         }
 
@@ -110,22 +106,19 @@ public class MaceKill extends Module {
 
     private boolean hasTotem(Entity e) {
         return e instanceof LivingEntity le
-            && (le.getMainHandStack().isOf(Items.TOTEM_OF_UNDYING) || le.getOffHandStack().isOf(Items.TOTEM_OF_UNDYING));
+            && (le.getMainHandItem().is(Items.TOTEM_OF_UNDYING) || le.getOffhandItem().is(Items.TOTEM_OF_UNDYING));
     }
 
     private void sendPos(double x, double y, double z) {
-        // 1.21 - 1.21.1:
-        // mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(x, y, z, false));
-        // 1.21.2+:
-        mc.getNetworkHandler().sendPacket(
-            new PlayerMoveC2SPacket.PositionAndOnGround(x, y, z, false, mc.player.horizontalCollision));
+        mc.getConnection().send(
+            new ServerboundMovePlayerPacket.Pos(x, y, z, false, mc.player.horizontalCollision));
     }
 
     private double freeHeightAbove(double max) {
-        Box box = mc.player.getBoundingBox();
+        AABB box = mc.player.getBoundingBox();
         double free = 0;
         while (free < max) {
-            if (!mc.world.isSpaceEmpty(mc.player, box.offset(0, free + 1, 0))) break;
+            if (!mc.level.noCollision(mc.player, box.move(0, free + 1, 0))) break;
             free++;
         }
         return free;
