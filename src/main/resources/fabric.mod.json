@@ -1,35 +1,21 @@
 {
   "schemaVersion": 1,
-  "id": "addon-template",
+  "id": "macekill-addon",
   "version": "${version}",
-  "name": "Addon Template",
-  "description": "An addon template for Meteor Client addons.",
-  "authors": [
-    "seasnail"
-  ],
+  "name": "MaceKill Addon",
+  "description": "Meteor Client addon providing the MaceKill module.",
+  "authors": ["MaceKill"],
   "contact": {
-    "sources": "https://github.com/MeteorDevelopment/meteor-addon-template"
+    "sources": "https://github.com/YOUR_GITHUB_USERNAME/MaceKill-Addon"
   },
-  "icon": "assets/template/icon.png",
   "environment": "client",
   "entrypoints": {
     "meteor": [
       "com.example.addon.AddonTemplate"
     ]
   },
-  "mixins": [
-    "addon-template.mixins.json"
-  ],
-  "custom": {
-    "meteor-client:color": "225,25,25",
-    "modmenu": {
-      "parent": {
-        "id": "meteor-client"
-      }
-    }
-  },
   "depends": {
-    "java": ">=${jdk_version}",
+    "java": ">=21",
     "minecraft": "${minecraft_version}",
     "meteor-client": "*"
   }
